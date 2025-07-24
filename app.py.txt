@@ -1,0 +1,648 @@
+# requirements.txt
+streamlit==1.28.0
+yfinance==0.2.25
+plotly==5.17.0
+pandas==2.1.4
+numpy==1.25.2
+requests==2.31.0
+aiohttp==3.9.1
+textblob==0.17.1
+scikit-learn==1.3.2
+python-dateutil==2.8.2
+
+# ============================================================================
+# app.py - Version optimisée pour le cloud
+# ============================================================================
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+import yfinance as yf
+import plotly.graph_objects as go
+import plotly.express as px
+from datetime import datetime, timedelta
+import requests
+import json
+from typing import Dict, List
+import time
+
+# Configuration PWA (Progressive Web App)
+st.set_page_config(
+    page_title="💰 Agent IA Financier",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+    menu_items={
+        'Get Help': 'https://github.com/votre-repo',
+        'Report a bug': "https://github.com/votre-repo/issues",
+        'About': "# Agent IA Financier\nSurveillance intelligente de portefeuille"
+    }
+)
+
+# Manifest PWA (permet l'installation comme app native)
+st.markdown("""
+<link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIkFnZW50IElBIEZpbmFuY2llciIsCiAgInNob3J0X25hbWUiOiAiRmluQUkiLAogICJzdGFydF91cmwiOiAiLyIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzY2N2VlYSIsCiAgInRoZW1lX2NvbG9yIjogIiM2NjdlZWEiLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJkYXRhOmltYWdlL3N2Zyt4bWw7YmFzZTY0LHBITjJaeUJwWkQwaWFXTnZiaUlnZG1sbGQwSnZlRDBpTUNBd0lESTBJREkwSWlCNGJXeHVjejBpYUhSMGNEb3ZMM2QzZHk1M00zUnZjbWN2TWpBd01DOXpkbWNpUGp4d1lYUm9JR1E5SWswNElEWmhNaUF5SURBZ01TQXdJREV5SURoMklEVmhNaUF5SURBZ01TMHdMVEZhVFRJZ05tRXlJRElnTUNBeElEQWdOaUE0ZGpWaE1pQXlJREFnTVMwd0xURmFUVEUwSURKaE1pQXlJREFnTVNBd0lERTJJRGgyWVRJZ01pQXdJREV0TUMweElpOCtQQzl6ZG1jKyIsCiAgICAgICJzaXplcyI6ICIyNHgyNCIsCiAgICAgICJ0eXBlIjogImltYWdlL3N2Zyt4bWwiCiAgICB9CiAgXQp9">
+
+<style>
+    /* PWA Styles pour mobile */
+    .main {
+        padding-top: 0.5rem;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+    
+    .stApp {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background-attachment: fixed;
+    }
+    
+    .main .block-container {
+        padding-top: 1rem;
+        background: white;
+        border-radius: 15px;
+        margin-top: 1rem;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    
+    /* Cards responsives */
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1rem;
+        border-radius: 15px;
+        color: white;
+        margin: 0.5rem 0;
+        text-align: center;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        transform: translateY(0);
+        transition: transform 0.3s ease;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+    }
+    
+    .alert-high {
+        background: linear-gradient(135deg, #ff4757, #ff3742);
+        padding: 1rem;
+        border-radius: 10px;
+        color: white;
+        margin: 0.5rem 0;
+        box-shadow: 0 3px 10px rgba(255,71,87,0.3);
+    }
+    
+    .alert-medium {
+        background: linear-gradient(135deg, #ffa502, #ff9500);
+        padding: 1rem;
+        border-radius: 10px;
+        color: white;
+        margin: 0.5rem 0;
+        box-shadow: 0 3px 10px rgba(255,165,2,0.3);
+    }
+    
+    .opportunity {
+        background: linear-gradient(135deg, #2ed573, #17c0eb);
+        padding: 1rem;
+        border-radius: 10px;
+        color: white;
+        margin: 0.5rem 0;
+        box-shadow: 0 3px 10px rgba(46,213,115,0.3);
+    }
+    
+    /* Animation de chargement */
+    .loading {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    /* Responsive pour mobile */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+        
+        .metric-card h3 {
+            font-size: 0.9rem;
+        }
+        
+        .metric-card h2 {
+            font-size: 1.5rem;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
+
+class CloudFinancialAgent:
+    """Agent IA optimisé pour le cloud"""
+    
+    def __init__(self):
+        self.cache_timeout = 300  # 5 minutes
+        
+    @st.cache_data(ttl=300)
+    def get_stock_analysis(_self, symbol: str) -> Dict:
+        """Analyse complète d'une action avec cache optimisé"""
+        try:
+            ticker = yf.Ticker(symbol)
+            
+            # Données en parallèle pour optimiser la vitesse
+            info = ticker.info
+            hist = ticker.history(period="1y")
+            
+            if hist.empty:
+                return {'error': f'Pas de données pour {symbol}'}
+            
+            # Calculs rapides
+            current_price = hist['Close'].iloc[-1]
+            prev_price = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
+            price_change = ((current_price - prev_price) / prev_price) * 100
+            
+            # Indicateurs techniques
+            sma_20 = hist['Close'].rolling(20).mean().iloc[-1] if len(hist) >= 20 else current_price
+            sma_50 = hist['Close'].rolling(50).mean().iloc[-1] if len(hist) >= 50 else current_price
+            
+            # RSI simplifié
+            delta = hist['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            rs = gain / loss
+            rsi = (100 - (100 / (1 + rs))).iloc[-1] if len(rs) > 0 else 50
+            
+            # Données fondamentales
+            pe_ratio = info.get('forwardPE') or info.get('trailingPE') or 0
+            dividend_yield = (info.get('dividendYield') or 0) * 100
+            debt_to_equity = info.get('debtToEquity') or 0
+            market_cap = info.get('marketCap') or 0
+            
+            # Score de solidité
+            score = _self._calculate_score(pe_ratio, dividend_yield, debt_to_equity, info)
+            
+            # Signaux de trading
+            signals = _self._generate_signals(current_price, sma_20, sma_50, rsi, score, dividend_yield)
+            
+            return {
+                'symbol': symbol,
+                'name': info.get('longName', symbol)[:30],  # Tronquer pour mobile
+                'current_price': round(current_price, 2),
+                'price_change': round(price_change, 2),
+                'pe_ratio': round(pe_ratio, 1) if pe_ratio else 0,
+                'dividend_yield': round(dividend_yield, 2),
+                'debt_to_equity': round(debt_to_equity, 1),
+                'sma_20': round(sma_20, 2),
+                'sma_50': round(sma_50, 2),
+                'rsi': round(rsi, 1),
+                'solidity_score': round(score, 0),
+                'sector': info.get('sector', 'N/A')[:15],  # Tronquer
+                'market_cap_b': round(market_cap / 1e9, 1) if market_cap else 0,
+                'signals': signals,
+                'last_update': datetime.now().strftime('%H:%M')
+            }
+            
+        except Exception as e:
+            return {'error': f'Erreur {symbol}: {str(e)[:50]}'}
+    
+    def _calculate_score(self, pe_ratio: float, dividend_yield: float, 
+                        debt_to_equity: float, info: Dict) -> float:
+        """Score de solidité optimisé"""
+        score = 50
+        
+        # Dividendes (+25 points max)
+        if dividend_yield > 4:
+            score += 25
+        elif dividend_yield > 2:
+            score += 15
+        
+        # PE ratio (+20 points max)
+        if pe_ratio and 5 <= pe_ratio <= 20:
+            score += 20
+        elif pe_ratio and 20 < pe_ratio <= 30:
+            score += 10
+        
+        # Endettement (+15 points max)
+        if debt_to_equity < 30:
+            score += 15
+        elif debt_to_equity < 60:
+            score += 8
+        
+        # ROE (+10 points max)
+        roe = info.get('returnOnEquity', 0)
+        if roe and roe > 0.20:
+            score += 10
+        elif roe and roe > 0.10:
+            score += 5
+        
+        return min(100, max(0, score))
+    
+    def _generate_signals(self, price: float, sma_20: float, sma_50: float, 
+                         rsi: float, score: float, dividend_yield: float) -> List[Dict]:
+        """Génère les signaux de trading"""
+        signals = []
+        
+        # Signal de vente
+        if score < 30:
+            signals.append({
+                'type': 'sell',
+                'priority': 'high',
+                'message': f'🚨 Score très faible ({score:.0f}/100)',
+                'action': 'Vendre rapidement'
+            })
+        elif rsi > 75:
+            signals.append({
+                'type': 'sell', 
+                'priority': 'medium',
+                'message': f'📈 Suracheté (RSI: {rsi:.1f})',
+                'action': 'Considérer une prise de bénéfices'
+            })
+        
+        # Signal d'achat
+        if score > 70 and rsi < 35:
+            signals.append({
+                'type': 'buy',
+                'priority': 'high', 
+                'message': f'🚀 Excellente opportunité (Score: {score:.0f}, RSI: {rsi:.1f})',
+                'action': 'Achat recommandé'
+            })
+        elif price < sma_50 and score > 60:
+            signals.append({
+                'type': 'buy',
+                'priority': 'medium',
+                'message': f'📉 Sous-évalué vs moyenne 50j',
+                'action': 'Accumulation progressive'
+            })
+        
+        # Opportunité dividende
+        if dividend_yield > 5 and score > 60:
+            signals.append({
+                'type': 'dividend',
+                'priority': 'medium',
+                'message': f'💰 Excellent dividende ({dividend_yield:.1f}%)',
+                'action': 'Idéal pour revenus passifs'
+            })
+        
+        return signals
+
+def render_mobile_dashboard():
+    """Interface mobile optimisée"""
+    
+    # Header avec animation
+    st.markdown("""
+    <div style="text-align: center; padding: 1rem 0;">
+        <h1 style="color: #667eea; margin: 0;">💰 Agent IA Financier</h1>
+        <p style="color: #666; margin: 0;">Surveillance intelligente • Temps réel</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Initialisation
+    if 'agent' not in st.session_state:
+        st.session_state.agent = CloudFinancialAgent()
+        st.session_state.portfolio = "AAPL,MSFT,GOOGL,NVDA,ASML.AS"
+        st.session_state.last_refresh = datetime.now()
+    
+    agent = st.session_state.agent
+    
+    # Menu de navigation mobile
+    selected = st.radio(
+        "Navigation",
+        ["🏠 Dashboard", "📊 Détails", "🔔 Alertes", "⚙️ Config"],
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+    
+    if selected == "🏠 Dashboard":
+        render_dashboard(agent)
+    elif selected == "📊 Détails":
+        render_details(agent)
+    elif selected == "🔔 Alertes":
+        render_alerts(agent)
+    elif selected == "⚙️ Config":
+        render_config()
+
+def render_dashboard(agent):
+    """Dashboard principal"""
+    
+    # Input portefeuille avec suggestions
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        portfolio_input = st.text_input(
+            "Portefeuille",
+            value=st.session_state.portfolio,
+            placeholder="Ex: AAPL,MSFT,GOOGL,MC.PA"
+        )
+    
+    with col2:
+        if st.button("🔄", help="Actualiser"):
+            st.session_state.last_refresh = datetime.now()
+            st.cache_data.clear()
+    
+    if portfolio_input:
+        st.session_state.portfolio = portfolio_input
+        symbols = [s.strip().upper() for s in portfolio_input.split(',') if s.strip()]
+        
+        # Indicateur de chargement
+        with st.spinner('🔄 Analyse en cours...'):
+            # Analyse parallèle pour la vitesse
+            analyses = {}
+            for symbol in symbols[:6]:  # Limite à 6 pour la vitesse
+                analysis = agent.get_stock_analysis(symbol)
+                if 'error' not in analysis:
+                    analyses[symbol] = analysis
+        
+        if analyses:
+            # Métriques globales
+            total_score = np.mean([a['solidity_score'] for a in analyses.values()])
+            total_alerts = sum(len([s for s in a['signals'] if s['priority'] == 'high']) for a in analyses.values())
+            total_opportunities = sum(len([s for s in a['signals'] if s['type'] in ['buy', 'dividend']]) for a in analyses.values())
+            
+            # Affichage des métriques
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <h3>🎯 Score Moyen</h3>
+                    <h2>{total_score:.0f}/100</h2>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                color = "#ff4757" if total_alerts > 0 else "#2ed573"
+                st.markdown(f"""
+                <div class="metric-card" style="background: linear-gradient(135deg, {color}, {color}cc);">
+                    <h3>⚠️ Alertes</h3>
+                    <h2>{total_alerts}</h2>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <h3>🚀 Opportunités</h3>
+                    <h2>{total_opportunities}</h2>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Positions avec signaux
+            st.subheader("📈 Vos Positions")
+            
+            for symbol, data in analyses.items():
+                with st.expander(f"📊 {symbol} - {data['name']}", expanded=False):
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        price_color = "green" if data['price_change'] >= 0 else "red"
+                        st.metric(
+                            "Prix",
+                            f"{data['current_price']:.2f}€",
+                            f"{data['price_change']:+.2f}%",
+                            delta_color=price_color
+                        )
+                    
+                    with col2:
+                        st.metric("Score", f"{data['solidity_score']:.0f}/100")
+                        st.metric("RSI", f"{data['rsi']:.1f}")
+                    
+                    with col3:
+                        st.metric("Dividende", f"{data['dividend_yield']:.2f}%")
+                        st.metric("PE", f"{data['pe_ratio']:.1f}" if data['pe_ratio'] else "N/A")
+                    
+                    # Affichage des signaux
+                    for signal in data['signals']:
+                        if signal['priority'] == 'high':
+                            st.markdown(f"""
+                            <div class="alert-high">
+                                <strong>{signal['message']}</strong><br>
+                                💡 {signal['action']}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        elif signal['type'] in ['buy', 'dividend']:
+                            st.markdown(f"""
+                            <div class="opportunity">
+                                <strong>{signal['message']}</strong><br>
+                                💡 {signal['action']}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div class="alert-medium">
+                                <strong>{signal['message']}</strong><br>
+                                💡 {signal['action']}
+                            </div>
+                            """, unsafe_allow_html=True)
+            
+            # Timestamp
+            st.caption(f"🕐 Dernière mise à jour: {st.session_state.last_refresh.strftime('%H:%M:%S')}")
+
+def render_details(agent):
+    """Vue détaillée d'une action"""
+    st.subheader("📊 Analyse Détaillée")
+    
+    # Sélection d'action
+    symbol = st.text_input("Symbole à analyser", "AAPL").upper()
+    
+    if symbol:
+        with st.spinner(f'Analyse de {symbol}...'):
+            analysis = agent.get_stock_analysis(symbol)
+        
+        if 'error' in analysis:
+            st.error(analysis['error'])
+        else:
+            # Graphique prix
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period="6mo")
+                
+                if not hist.empty:
+                    fig = go.Figure()
+                    
+                    # Prix
+                    fig.add_trace(go.Scatter(
+                        x=hist.index,
+                        y=hist['Close'],
+                        mode='lines',
+                        name='Prix',
+                        line=dict(color='#667eea', width=2)
+                    ))
+                    
+                    # Moyennes mobiles
+                    if len(hist) >= 20:
+                        sma_20 = hist['Close'].rolling(20).mean()
+                        fig.add_trace(go.Scatter(
+                            x=hist.index,
+                            y=sma_20,
+                            mode='lines',
+                            name='SMA 20',
+                            line=dict(color='orange', width=1)
+                        ))
+                    
+                    if len(hist) >= 50:
+                        sma_50 = hist['Close'].rolling(50).mean()
+                        fig.add_trace(go.Scatter(
+                            x=hist.index,
+                            y=sma_50,
+                            mode='lines',
+                            name='SMA 50',
+                            line=dict(color='red', width=1)
+                        ))
+                    
+                    fig.update_layout(
+                        title=f"{symbol} - Évolution 6 mois",
+                        height=400,
+                        margin=dict(l=0, r=0, t=30, b=0),
+                        showlegend=True
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+            except Exception as e:
+                st.error(f"Erreur graphique: {e}")
+            
+            # Métriques détaillées
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Données Financières**")
+                st.write(f"• PE Ratio: {analysis['pe_ratio']}")
+                st.write(f"• Dividende: {analysis['dividend_yield']:.2f}%")
+                st.write(f"• Dette/Capitaux: {analysis['debt_to_equity']:.1f}")
+                st.write(f"• Cap. Marché: {analysis['market_cap_b']:.1f}B€")
+            
+            with col2:
+                st.write("**Analyse Technique**")
+                st.write(f"• RSI: {analysis['rsi']:.1f}")
+                st.write(f"• SMA 20: {analysis['sma_20']:.2f}€")
+                st.write(f"• SMA 50: {analysis['sma_50']:.2f}€")
+                st.write(f"• Score: {analysis['solidity_score']:.0f}/100")
+
+def render_alerts(agent):
+    """Centre d'alertes"""
+    st.subheader("🔔 Centre d'Alertes")
+    
+    if hasattr(st.session_state, 'portfolio'):
+        symbols = [s.strip().upper() for s in st.session_state.portfolio.split(',') if s.strip()]
+        
+        all_alerts = []
+        
+        for symbol in symbols:
+            analysis = agent.get_stock_analysis(symbol)
+            if 'error' not in analysis:
+                for signal in analysis['signals']:
+                    all_alerts.append({
+                        'symbol': symbol,
+                        'name': analysis['name'],
+                        **signal
+                    })
+        
+        # Tri par priorité
+        high_priority = [a for a in all_alerts if a['priority'] == 'high']
+        medium_priority = [a for a in all_alerts if a['priority'] == 'medium']
+        
+        if high_priority:
+            st.write("🚨 **Alertes Haute Priorité**")
+            for alert in high_priority:
+                st.markdown(f"""
+                <div class="alert-high">
+                    <strong>{alert['symbol']} - {alert['name']}</strong><br>
+                    {alert['message']}<br>
+                    <small>💡 {alert['action']}</small>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        if medium_priority:
+            st.write("⚠️ **Alertes Standard**")
+            for alert in medium_priority:
+                if alert['type'] in ['buy', 'dividend']:
+                    st.markdown(f"""
+                    <div class="opportunity">
+                        <strong>{alert['symbol']} - {alert['name']}</strong><br>
+                        {alert['message']}<br>
+                        <small>💡 {alert['action']}</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="alert-medium">
+                        <strong>{alert['symbol']} - {alert['name']}</strong><br>
+                        {alert['message']}<br>
+                        <small>💡 {alert['action']}</small>
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+        if not all_alerts:
+            st.success("✅ Aucune alerte - Votre portefeuille est équilibré")
+
+def render_config():
+    """Configuration"""
+    st.subheader("⚙️ Configuration")
+    
+    # Paramètres d'alerte
+    st.write("**Seuils d'Alerte**")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        rsi_high = st.slider("RSI Suracheté", 60, 85, 75)
+        rsi_low = st.slider("RSI Survente", 15, 40, 30)
+    
+    with col2:
+        score_min = st.slider("Score minimum", 20, 60, 30)
+        dividend_min = st.slider("Dividende minimum", 1.0, 8.0, 4.0)
+    
+    # Notifications
+    st.write("**Notifications**")
+    enable_sound = st.checkbox("Sons d'alerte")
+    auto_refresh = st.selectbox("Actualisation", 
+                               ["Manuelle", "30 secondes", "1 minute", "5 minutes"])
+    
+    # Installation PWA
+    st.write("**📱 Installation sur téléphone**")
+    st.info("""
+    **Méthode 1: PWA (Recommandée)**
+    1. Ouvrir cette page dans Chrome/Safari mobile
+    2. Menu → "Ajouter à l'écran d'accueil"
+    3. L'app apparaît comme une app native !
+    
+    **Méthode 2: Raccourci**
+    1. Copier l'URL actuelle
+    2. Créer un marque-page sur l'écran d'accueil
+    """)
+    
+    # Export/Import
+    st.write("**Données**")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📤 Exporter config"):
+            config = {
+                'portfolio': st.session_state.get('portfolio', ''),
+                'rsi_high': rsi_high,
+                'rsi_low': rsi_low,
+                'score_min': score_min,
+                'dividend_min': dividend_min
+            }
+            st.download_button(
+                "💾 Télécharger",
+                json.dumps(config, indent=2),
+                "config.json",
+                "application/json"
+            )
+    
+    with col2:
+        uploaded = st.file_uploader("📥 Importer config", type="json")
+        if uploaded:
+            config = json.load(uploaded)
+            st.session_state.portfolio = config.get('portfolio', '')
+            st.success("✅ Configuration importée!")
+
+if __name__ == "__main__":
+    render_mobile_dashboard()
